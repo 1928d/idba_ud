@@ -4,7 +4,7 @@ This repository is a basic fork of `IDBA`
 (https://github.com/loneknightpy/idba), specifically only the source files
 required to build `IDBA-UD`.
 
-# build
+## build
 Run `make idba_ud` to build the executable. To change the maximum K-mer size and
 maximal read length use the variables `MAXK` and `MAXSS` respectively.
 
