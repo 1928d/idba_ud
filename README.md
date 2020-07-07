@@ -3,8 +3,12 @@
 This repository is a basic fork of `IDBA` (https://github.com/loneknightpy/idba),
 specifically only the source files required to build `IDBA-UD`.
 
+# build
+Run `make idba_ud` to build the executable.
+
 ## changes
 The source code was run through `cppcheck` (http://cppcheck.sourceforge.net/) to remove unused functions.
+
 `cppcheck --enable=unusedFunction .`
 
 The removed functions were:
