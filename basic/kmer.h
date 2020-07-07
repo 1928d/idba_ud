@@ -175,7 +175,11 @@ class Kmer {
 
     static uint32_t max_size() { return kMaxSize; }
 
-    static const uint32_t kNumUint64 = 8;
+#ifndef MAXK
+    static const uint32_t kNumUint64 = 4;
+#else
+    static const uint32_t kNumUint64 = MAXK;
+#endif
     static const uint32_t kBitsForSize = ((kNumUint64 <= 2) ? 6 : ((kNumUint64 <= 8) ? 8 : 16));
     static const uint32_t kBitsForKmer = (kNumUint64 * 64 - kBitsForSize);
     static const uint32_t kMaxSize = kBitsForKmer / 2;

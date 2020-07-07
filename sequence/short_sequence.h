@@ -103,7 +103,11 @@ class ShortSequence {
         return size() < seq.size();
     }
 
-    static const uint32_t kMaxShortSequence = 512;
+#ifndef MAXSS
+    static const uint32_t kMaxShortSequence = 128;
+#else
+    static const uint32_t kMaxShortSequence = MAXSS;
+#endif
     static const uint32_t kNumBytes = (kMaxShortSequence + 3) / 4 + 2;
 
   private:
