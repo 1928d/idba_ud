@@ -94,7 +94,7 @@ class ContigGraph {
     int64_t RemoveStandAlone(int min_length);
     int64_t RemoveDeadEnd(int min_length);
     int64_t RemoveDeadEnd(int min_length, double min_cover);
-    int64_t RemoveBubble();
+    int64_t RemoveBubble(int max_branches, int max_length);
 
     double IterateCoverage(int min_length, double min_cover, double max_cover, double factor = 1.1);
     double IterateLocalCoverage(int min_length, double ratio, double min_cover, double max_cover, double factor = 1.1);

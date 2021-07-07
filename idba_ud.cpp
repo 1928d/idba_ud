@@ -124,14 +124,17 @@ void Iterate(int kmer_size, int new_kmer_size);
 // void Scaffold(int kmer_size, int min_contig);
 // void AddPairs(int level, ScaffoldGraph &scaffold_graph, const string &read_file, const string &align_file);
 void AlignReads(const string &contig_file, ShortReadLibrary &library, const string &align_file);
-void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file, AssemblyInfo &assembly_info);
+void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file,
+                    AssemblyInfo &assembly_info);
 
 int main(int argc, char *argv[]) {
     OptionsDescription desc;
 
     desc.AddOption("out", "o", option.directory, "output directory");
-    desc.AddOption("read_1", "r", option.read_file_1, FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
-    desc.AddOption("read_2", "s", option.read_file_2, FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
+    desc.AddOption("read_1", "r", option.read_file_1,
+                   FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
+    desc.AddOption("read_2", "s", option.read_file_2,
+                   FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
     desc.AddOption("read_level_2", "", option.extra_read_files[0], "paired-end reads fasta for second level scaffolds");
     desc.AddOption("read_level_3", "", option.extra_read_files[1], "paired-end reads fasta for third level scaffolds");
     desc.AddOption("read_level_4", "", option.extra_read_files[2], "paired-end reads fasta for fourth level scaffolds");
@@ -322,16 +325,22 @@ void Assemble(HashGraph &hash_graph) {
     contigs.clear();
     contig_infos.clear();
 
-    contig_graph.RemoveDeadEnd(option.min_contig);
+    // contig_graph.RemoveDeadEnd(option.min_contig);
+    contig_graph.RemoveDeadEnd((int)3.5 * kmer_size);
 
     if (!option.is_no_bubble) {
-        int bubble = contig_graph.RemoveBubble();
+        // Default bubble settings
+        // int bubble = contig_graph.RemoveBubble(4, kmer_size + 2);
+        // NOTE: testing more aggressive bubble popping
+        int bubble = contig_graph.RemoveBubble(4, 3 * kmer_size + 2);
         cout << "merge bubble " << bubble << endl;
         contig_graph.MergeSimilarPath();
     }
 
+    // NOTE: previous default
+    // contig_graph.RemoveLocalLowCoverage(min_cover, option.min_contig, 0.1);
     if (!option.is_no_coverage)
-        contig_graph.RemoveLocalLowCoverage(min_cover, option.min_contig, 0.1);
+        contig_graph.RemoveLocalLowCoverage(min_cover, 10 * kmer_size, 0.25);
 
     contig_graph.SortVertices();
     contig_graph.GetContigs(contigs, contig_infos);
@@ -616,8 +625,8 @@ void AlignReads(const string &contig_file, ShortReadLibrary &library, const stri
 ///
 /// Allow read_file to be both FASTA, FASTQ, with and without GZ
 ///
-#include <zlib.h>
 #include "kseq.h"
+#include <zlib.h>
 KSEQ_INIT(gzFile, gzread)
 
 uint64_t ReadSequenceEx(const string &read_r, const string &read_s, deque<ShortSequence> &sequences) {
@@ -654,7 +663,8 @@ uint64_t ReadSequenceEx(const string &read_r, const string &read_s, deque<ShortS
     return sequences.size();
 }
 
-void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file, AssemblyInfo &assembly_info) {
+void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file,
+                    AssemblyInfo &assembly_info) {
     if (read_file_1 != "")
         ReadSequenceEx(read_file_1, read_file_2, assembly_info.reads);
     if (long_read_file != "")

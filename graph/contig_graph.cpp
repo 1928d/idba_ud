@@ -346,7 +346,7 @@ int64_t ContigGraph::RemoveDeadEnd(int min_length, double min_cover) {
     return num_deadend;
 }
 
-int64_t ContigGraph::RemoveBubble() {
+int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
     deque<ContigGraphVertexAdaptor> candidates;
     omp_lock_t bubble_lock;
     omp_init_lock(&bubble_lock);
@@ -357,7 +357,7 @@ int64_t ContigGraph::RemoveBubble() {
             ContigGraphVertexAdaptor current(&vertices_[i], strand);
 
             if (current.out_edges().size() > 1 && current.contig_size() > kmer_size_) {
-                ContigGraphBranchGroup branch_group(this, current, 4, kmer_size_ + 2);
+                ContigGraphBranchGroup branch_group(this, current, max_branches, max_length);
 
                 if (branch_group.Search()) {
                     ContigGraphVertexAdaptor begin = branch_group.begin();
@@ -366,7 +366,7 @@ int64_t ContigGraph::RemoveBubble() {
                     begin.ReverseComplement();
                     end.ReverseComplement();
                     std::swap(begin, end);
-                    ContigGraphBranchGroup rev_branch_group(this, begin, 4, kmer_size_ + 2);
+                    ContigGraphBranchGroup rev_branch_group(this, begin, max_branches, max_length);
 
                     if (rev_branch_group.Search() && rev_branch_group.end() == end) {
                         omp_set_lock(&bubble_lock);
@@ -383,7 +383,7 @@ int64_t ContigGraph::RemoveBubble() {
         ContigGraphVertexAdaptor current = candidates[i];
 
         if (current.out_edges().size() > 1) {
-            ContigGraphBranchGroup branch_group(this, current, 4, kmer_size_ + 2);
+            ContigGraphBranchGroup branch_group(this, current, max_branches, max_length);
 
             if (branch_group.Search()) {
                 ContigGraphVertexAdaptor begin = branch_group.begin();
@@ -392,7 +392,7 @@ int64_t ContigGraph::RemoveBubble() {
                 begin.ReverseComplement();
                 end.ReverseComplement();
                 std::swap(begin, end);
-                ContigGraphBranchGroup rev_branch_group(this, begin, 4, kmer_size_ + 2);
+                ContigGraphBranchGroup rev_branch_group(this, begin, max_branches, max_length);
 
                 if (rev_branch_group.Search() && rev_branch_group.end() == end) {
                     branch_group.Merge();
