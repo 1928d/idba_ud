@@ -1,7 +1,7 @@
-MAXK=4
-MAXSS=128
+MAXK=6
+MAXSS=310
 
-CXX=/usr/local/bin/g++-9
+CXX=/usr/local/bin/g++-11
 CXXFLAGS=-g -std=c++11 -Wall -pedantic -fopenmp -I. -DMAXSS=$(MAXSS) -DMAXK=$(MAXK) -O3 -march=native
 
 CXXSRC = \
@@ -13,9 +13,11 @@ CXXSRC = \
   $(wildcard sequence/*.cpp)
 
 OBJ = $(CXXSRC:.cpp=.o)
-LDFLAGS = -fopenmp
+LDFLAGS = -fopenmp -lz
 
 idba_ud: $(OBJ)
+
+dba: dba.cpp $(OBJ)
 
 .PHONY: clean
 clean:

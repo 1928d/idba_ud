@@ -57,7 +57,7 @@ void MakeDir(const string &directory) {
     }
 }
 
-void PrintN50(const deque<Sequence> &contigs, int min_contig, int ref_length) {
+void PrintN50(const deque<Sequence> &contigs, int dead, int min_contig, int ref_length) {
     int64_t sum = 0;
     deque<int> lengths;
     for (uint32_t i = 0; i < contigs.size(); ++i) {
@@ -88,9 +88,9 @@ void PrintN50(const deque<Sequence> &contigs, int min_contig, int ref_length) {
     }
 
     cout << FormatString("contigs: %d n50: %d max: %d mean: %lld total length: "
-                         "%lld n80: %d",
+                         "%lld n80: %d dead ends: %d",
                          int(lengths.size()), n50, (int)lengths[0], (long long)(sum / lengths.size()), (long long)sum,
-                         n80)
+                         n80, dead)
          << endl;
     cout.flush();
 }

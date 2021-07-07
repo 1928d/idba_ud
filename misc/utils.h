@@ -22,6 +22,6 @@ FILE *OpenFile(const std::string &filename, const std::string &mode);
 void MakeDir(const std::string &diretory);
 void Replace(std::string &s, int a, int b);
 void ToLower(std::string &s);
-void PrintN50(const std::deque<Sequence> &contigs, int min_contig = 0, int ref_length = 0);
+void PrintN50(const std::deque<Sequence> &contigs, int dead = 0, int min_contig = 0, int ref_length = 0);
 
 #endif

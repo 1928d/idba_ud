@@ -247,6 +247,20 @@ int64_t ContigGraph::Prune(int min_length) {
     return old_num_vertices - vertices_.size();
 }
 
+int ContigGraph::CountDeadEnds() {
+    AtomicInteger<int> count(0);
+
+#pragma omp parallel for
+    for (int64_t i = 0; i < (int64_t)vertices_.size(); ++i) {
+        if (vertices_[i].contig().size() == kmer_size_ && vertices_[i].contig().IsPalindrome())
+            continue;
+        if (vertices_[i].in_edges().empty() || vertices_[i].out_edges().empty()) {
+            count++;
+        }
+    }
+    return count;
+}
+
 int64_t ContigGraph::Trim(int min_length) {
     uint64_t old_num_vertices = vertices_.size();
 #pragma omp parallel for

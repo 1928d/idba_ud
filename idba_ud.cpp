@@ -38,7 +38,7 @@ using namespace std;
 
 struct IDBAOption {
     string directory;
-    string read_file;
+    string read_file_1, read_file_2;
     string long_read_file;
     deque<string> extra_read_files;
     int mink;
@@ -121,15 +121,17 @@ void AlignReads(const string &contig_file, const string &align_file);
 void CorrectReads(int kmer_size);
 void LocalAssembly(int kmer_size, int new_kmer_size);
 void Iterate(int kmer_size, int new_kmer_size);
-void Scaffold(int kmer_size, int min_contig);
-void AddPairs(int level, ScaffoldGraph &scaffold_graph, const string &read_file, const string &align_file);
+// void Scaffold(int kmer_size, int min_contig);
+// void AddPairs(int level, ScaffoldGraph &scaffold_graph, const string &read_file, const string &align_file);
 void AlignReads(const string &contig_file, ShortReadLibrary &library, const string &align_file);
+void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file, AssemblyInfo &assembly_info);
 
 int main(int argc, char *argv[]) {
     OptionsDescription desc;
 
     desc.AddOption("out", "o", option.directory, "output directory");
-    desc.AddOption("read", "r", option.read_file, FormatString("fasta read file (<=%d)", ShortSequence::max_size()));
+    desc.AddOption("read_1", "r", option.read_file_1, FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
+    desc.AddOption("read_2", "s", option.read_file_2, FormatString("fasta/q (gz) read file (<=%d)", ShortSequence::max_size()));
     desc.AddOption("read_level_2", "", option.extra_read_files[0], "paired-end reads fasta for second level scaffolds");
     desc.AddOption("read_level_3", "", option.extra_read_files[1], "paired-end reads fasta for third level scaffolds");
     desc.AddOption("read_level_4", "", option.extra_read_files[2], "paired-end reads fasta for fourth level scaffolds");
@@ -163,7 +165,7 @@ int main(int argc, char *argv[]) {
     try {
         desc.Parse(argc, argv);
 
-        if (option.read_file == "" && option.long_read_file == "")
+        if (option.read_file_1 == "" && option.long_read_file == "")
             throw logic_error("not enough parameters");
 
         if (option.maxk < option.mink)
@@ -196,7 +198,8 @@ int main(int argc, char *argv[]) {
         omp_set_num_threads(option.num_threads);
     cout << "number of threads " << option.num_threads << endl;
 
-    ReadInput(option.read_file, option.long_read_file, assembly_info);
+    ReadInputFastq(option.read_file_1, option.read_file_2, option.long_read_file, assembly_info);
+    // ReadInput(option.read_file_1, option.long_read_file, assembly_info);
     deque<Sequence> extra_reads;
     for (unsigned i = 0; i < option.extra_read_files.size(); ++i) {
         if (option.extra_read_files[i] != "") {
@@ -263,7 +266,9 @@ int main(int argc, char *argv[]) {
             writer.Write(contigs[i], names[i]);
     }
 
-    Scaffold(option.maxk, option.min_contig);
+    // NOTE: we're skipping the scaffolding entirely!
+    //
+    // Scaffold(option.maxk, option.min_contig);
 
     string end_file = option.directory + "/end";
     fclose(OpenFile(end_file, "wb"));
@@ -346,7 +351,8 @@ void Assemble(HashGraph &hash_graph) {
     deque<ContigInfo> multi_contig_infos;
     contig_graph.SortVertices();
     contig_graph.GetContigs(multi_contigs, multi_contig_infos);
-    PrintN50(multi_contigs);
+    auto dead = contig_graph.CountDeadEnds();
+    PrintN50(multi_contigs, dead);
     // WriteSequence(option.contig_file(kmer_size), multi_contigs);
     WriteContig(option.contig_file(kmer_size), multi_contigs, multi_contig_infos, FormatString("contig-%d", kmer_size));
     // WriteContigInfo(option.contig_info_file(kmer_size), multi_contig_infos);
@@ -469,7 +475,7 @@ void Iterate(int kmer_size, int new_kmer_size) {
 
     Assemble(hash_graph);
 }
-
+/*
 void Scaffold(int kmer_size, int min_contig) {
     assembly_info.reads.clear();
     assembly_info.long_reads.clear();
@@ -591,6 +597,7 @@ void AddPairs(int level, ScaffoldGraph &scaffold_graph, const string &read_file,
 
     scaffold_graph.set_library_info(level, read_length, mean_coverage, median, sd);
 }
+*/
 
 void AlignReads(const string &contig_file, ShortReadLibrary &library, const string &align_file) {
     deque<Sequence> contigs;
@@ -604,4 +611,57 @@ void AlignReads(const string &contig_file, ShortReadLibrary &library, const stri
     cout << "aligned " << num_aligned_reads << " reads" << endl;
 
     assembly_info.reads.swap(library.reads());
+}
+
+///
+/// Allow read_file to be both FASTA, FASTQ, with and without GZ
+///
+#include <zlib.h>
+#include "kseq.h"
+KSEQ_INIT(gzFile, gzread)
+
+uint64_t ReadSequenceEx(const string &read_r, const string &read_s, deque<ShortSequence> &sequences) {
+    gzFile fpr = gzopen(read_r.c_str(), "r");
+    kseq_t *sqr = kseq_init(fpr);
+    gzFile fps = 0;
+    kseq_t *sqs = 0;
+
+    bool paired = read_s != "";
+    if (paired) {
+        fps = gzopen(read_s.c_str(), "r");
+        sqs = kseq_init(fps);
+    }
+    sequences.clear();
+    while (kseq_read(sqr) >= 0 && (paired ? (kseq_read(sqs) >= 0) : true)) {
+        Sequence r(string(sqr->seq.s));
+        r.TrimN();
+        ShortSequence short_r(r);
+        sequences.push_back(short_r);
+        if (paired) {
+            Sequence s(string(sqs->seq.s));
+            s.TrimN();
+            ShortSequence short_s(s);
+            sequences.push_back(short_s);
+        }
+    }
+
+    kseq_destroy(sqr);
+    gzclose(fpr);
+    if (paired) {
+        kseq_destroy(sqs);
+        gzclose(fps);
+    }
+    return sequences.size();
+}
+
+void ReadInputFastq(const std::string &read_file_1, const std::string &read_file_2, const std::string &long_read_file, AssemblyInfo &assembly_info) {
+    if (read_file_1 != "")
+        ReadSequenceEx(read_file_1, read_file_2, assembly_info.reads);
+    if (long_read_file != "")
+        ReadSequence(long_read_file, assembly_info.long_reads);
+
+    assembly_info.read_flags.resize(assembly_info.reads.size());
+    assembly_info.long_read_flags.resize(assembly_info.long_reads.size());
+
+    assembly_info.ClearStatus();
 }

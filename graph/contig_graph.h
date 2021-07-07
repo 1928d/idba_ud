@@ -89,6 +89,8 @@ class ContigGraph {
     int64_t Trim(int min_length);
     int64_t Trim(int min_length, double min_cover);
 
+    int CountDeadEnds();
+
     int64_t RemoveStandAlone(int min_length);
     int64_t RemoveDeadEnd(int min_length);
     int64_t RemoveDeadEnd(int min_length, double min_cover);
