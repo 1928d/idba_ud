@@ -15,7 +15,8 @@ CXXSRC = \
 OBJ = $(CXXSRC:.cpp=.o)
 LDFLAGS = -fopenmp -lz
 
-idba_ud: $(OBJ)
+idba_ud: idba_ud.cpp $(OBJ)
+	$(CXX) $(CXXFLAGS) idba_ud.cpp $(OBJ) $(LDFLAGS) -o idba_ud
 
 dba: dba.cpp $(OBJ)
 
