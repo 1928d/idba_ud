@@ -94,7 +94,7 @@ class ContigGraph {
     int64_t RemoveStandAlone(int min_length);
     int64_t RemoveDeadEnd(int min_length);
     int64_t RemoveDeadEnd(int min_length, double min_cover);
-    int64_t RemoveBubble(int max_branches, int max_length);
+    int64_t RemoveBubble();
 
     double IterateCoverage(int min_length, double min_cover, double max_cover, double factor = 1.1);
     double IterateLocalCoverage(int min_length, double ratio, double min_cover, double max_cover, double factor = 1.1);
@@ -130,6 +130,10 @@ class ContigGraph {
     bool IsConverged(ContigGraphVertexAdaptor current);
     int64_t SplitBranches();
     void Decomposite();
+
+    void PrintGFASegments(std::ostream &os);
+    void PrintGFAEdges(std::ostream &os);
+
     void GetComponents(std::deque<std::deque<ContigGraphVertexAdaptor>> &components,
                        std::deque<std::string> &component_strings);
     void GetConsensus(std::deque<Sequence> &consensus);

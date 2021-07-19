@@ -229,7 +229,7 @@ void LocalAssembler::IterativeAssemble(AssemblyInfo &assembly_info, deque<Sequen
         contig_graph.RemoveDeadEnd(kmer_size * 2);
 
         // contig_graph.Trim(10);
-        contig_graph.RemoveBubble(4, kmer_size + 2); // Keeping conservative defaults here for now
+        contig_graph.RemoveBubble();
         // contig_graph.MergeSimilarPath();
         contig_graph.IterateCoverage(kmer_size * 2, 1, threshold);
         // contig_graph.Prune(kmer_size);
@@ -586,7 +586,7 @@ void LocalAssemblerWithReference::IterativeAssemble(AssemblyInfo &assembly_info,
         contig_graph.set_kmer_size(kmer_size);
         contig_graph.Initialize(contigs, contig_infos);
         contig_graph.RemoveDeadEnd(kmer_size * 2);
-        contig_graph.RemoveBubble(4, kmer_size + 2);
+        contig_graph.RemoveBubble();
         // contig_graph.MergeSimilarPath();
         contig_graph.IterateCoverage(kmer_size * 2, 1, threshold);
         contig_graph.Assemble(contigs, contig_infos);

@@ -95,6 +95,7 @@ struct IDBAOption {
     string align_file(int kmer_size) { return directory + FormatString("/align-%d", kmer_size); }
 
     string graph_file(int kmer_size) { return directory + FormatString("/graph-%d.fa", kmer_size); }
+    string gfa_file(int kmer_size) { return directory + FormatString("/graph-%d.gfa", kmer_size); }
 
     string contig_file(int kmer_size) { return directory + FormatString("/contig-%d.fa", kmer_size); }
 
@@ -325,22 +326,16 @@ void Assemble(HashGraph &hash_graph) {
     contigs.clear();
     contig_infos.clear();
 
-    // contig_graph.RemoveDeadEnd(option.min_contig);
-    contig_graph.RemoveDeadEnd((int)3.5 * kmer_size);
+    contig_graph.RemoveDeadEnd(option.min_contig);
 
     if (!option.is_no_bubble) {
-        // Default bubble settings
-        // int bubble = contig_graph.RemoveBubble(4, kmer_size + 2);
-        // NOTE: testing more aggressive bubble popping
-        int bubble = contig_graph.RemoveBubble(4, 3 * kmer_size + 2);
+        int bubble = contig_graph.RemoveBubble();
         cout << "merge bubble " << bubble << endl;
         contig_graph.MergeSimilarPath();
     }
 
-    // NOTE: previous default
-    // contig_graph.RemoveLocalLowCoverage(min_cover, option.min_contig, 0.1);
     if (!option.is_no_coverage)
-        contig_graph.RemoveLocalLowCoverage(min_cover, 10 * kmer_size, 0.25);
+        contig_graph.RemoveLocalLowCoverage(min_cover, option.min_contig, 0.1);
 
     contig_graph.SortVertices();
     contig_graph.GetContigs(contigs, contig_infos);
@@ -365,6 +360,10 @@ void Assemble(HashGraph &hash_graph) {
     // WriteSequence(option.contig_file(kmer_size), multi_contigs);
     WriteContig(option.contig_file(kmer_size), multi_contigs, multi_contig_infos, FormatString("contig-%d", kmer_size));
     // WriteContigInfo(option.contig_info_file(kmer_size), multi_contig_infos);
+
+    std::ofstream gfa_graph(option.gfa_file(kmer_size));
+    contig_graph.PrintGFASegments(gfa_graph);
+    contig_graph.PrintGFAEdges(gfa_graph);
 }
 
 void AlignReads(const string &contig_file, const string &align_file) {
@@ -484,129 +483,6 @@ void Iterate(int kmer_size, int new_kmer_size) {
 
     Assemble(hash_graph);
 }
-/*
-void Scaffold(int kmer_size, int min_contig) {
-    assembly_info.reads.clear();
-    assembly_info.long_reads.clear();
-
-    deque<Sequence> contigs;
-    ReadSequence(option.contig_file(option.maxk), contigs);
-    ScaffoldGraph scaffold_graph(option.maxk, contigs);
-
-    deque<string> read_files;
-    read_files.push_back(option.read_file);
-    for (unsigned i = 0; i < option.extra_read_files.size(); ++i) {
-        if (option.extra_read_files[i] != "")
-            read_files.push_back(option.extra_read_files[i]);
-    }
-
-    for (int level = 0; level < (int)read_files.size(); ++level)
-        AddPairs(level, scaffold_graph, read_files[level], option.align_file(option.maxk) + FormatString("-%d", level));
-
-    for (int level = 0; level < (int)read_files.size(); ++level) {
-        scaffold_graph.BuildEdges();
-        scaffold_graph.FilterEdges(option.min_pairs, scaffold_graph.sd(level) * 4);
-        scaffold_graph.ParseEdges();
-
-        cout << "edgs " << scaffold_graph.num_edges(level) << endl;
-        scaffold_graph.RemoveTransitiveConnections(level);
-
-        deque<ContigGraphPath> paths;
-        scaffold_graph.Assemble(level, paths);
-
-        deque<Sequence> contigs;
-        scaffold_graph.Assemble(level, contigs);
-        PrintN50(contigs);
-
-        WriteSequence(option.scaffold_file(level), contigs, "scaffold");
-
-        scaffold_graph.Initialize(paths);
-    }
-}
-
-void AddPairs(int level, ScaffoldGraph &scaffold_graph, const string &read_file, const string &align_file) {
-    ShortReadLibrary short_read_library;
-    ReadLibrary(read_file, short_read_library);
-    cout << "reads " << short_read_library.size() << endl;
-    AlignReads(option.contig_file(option.maxk), short_read_library, align_file);
-
-    EstimateDistance(align_file, median, sd);
-    if (median < 0 || median != median || sd != sd || sd > 2 * median) {
-        cout << "invalid insert distance" << endl;
-        return;
-    }
-
-    deque<Sequence> contigs;
-    ReadSequence(option.contig_file(option.maxk), contigs);
-
-    deque<ContigInfo> contig_infos(contigs.size());
-    vector<int> num_aligned_reads(contigs.size(), 0);
-    vector<double> coverage(contigs.size());
-
-    deque<ShortSequence> &reads = short_read_library.reads();
-
-    FILE *falign = OpenFile(align_file, "rb");
-    int buffer_size = (1 << 20) * option.num_threads;
-    for (int64_t offset = 0; offset < (int64_t)reads.size(); offset += buffer_size) {
-        int64_t size = min((int64_t)buffer_size, (int64_t)(reads.size() - offset));
-        vector<HashAlignerRecord> all_records(size);
-
-        ReadHashAlignerRecordBlock(falign, all_records);
-#pragma omp parallel for
-        for (int i = 0; i < size; ++i) {
-            HashAlignerRecord &record = all_records[i];
-
-            if (record.match_length != 0) {
-#pragma omp atomic
-                ++num_aligned_reads[record.ref_id];
-            }
-        }
-    }
-    fclose(falign);
-
-    double sum_coverage = 0;
-    double sum_length = 0;
-#pragma omp parallel for reduction(+ : sum_coverage, sum_length)
-    for (int64_t i = 0; i < (int64_t)contigs.size(); ++i) {
-        if ((int)contigs[i].size() > option.min_contig) {
-            sum_coverage += num_aligned_reads[i];
-            sum_length += contigs[i].size() - read_length + 1;
-            coverage[i] = 1.0 * num_aligned_reads[i] / (contigs[i].size() - reads[0].size() + 1);
-            contig_infos[i].set_kmer_count(num_aligned_reads[i]);
-        }
-    }
-    double mean_coverage = sum_coverage / sum_length;
-    cout << "expected coverage " << mean_coverage << endl;
-
-    int num_connections = 0;
-    falign = OpenFile(align_file, "rb");
-    for (unsigned i = 0; i < reads.size(); i += 2) {
-        deque<HashAlignerRecord> records1;
-        deque<HashAlignerRecord> records2;
-        ReadHashAlignerRecords(falign, records1);
-        ReadHashAlignerRecords(falign, records2);
-
-        for (unsigned j = 0; j < records1.size(); ++j) {
-            for (unsigned k = 0; k < records2.size(); ++k) {
-                HashAlignerRecord &r1 = records1[j];
-                HashAlignerRecord &r2 = records2[k];
-                r2.ReverseComplement();
-
-                if (r1.ref_length > option.min_contig && r2.ref_length > option.min_contig &&
-                    r1.ref_from - r1.query_from > r1.ref_length - median - 3 * sd &&
-                    r2.ref_to + r2.query_length - r2.query_to < median + 3 * sd && r1.ref_id != r2.ref_id) {
-                    int d = median - (r1.ref_length - (r1.ref_from - r1.query_from)) -
-                            (r2.ref_to + r2.query_length - r2.query_to);
-                    scaffold_graph.AddPair(level, (r1.ref_id * 2 + r1.is_reverse), (r2.ref_id * 2 + r2.is_reverse), d);
-                    ++num_connections;
-                }
-            }
-        }
-    }
-
-    scaffold_graph.set_library_info(level, read_length, mean_coverage, median, sd);
-}
-*/
 
 void AlignReads(const string &contig_file, ShortReadLibrary &library, const string &align_file) {
     deque<Sequence> contigs;

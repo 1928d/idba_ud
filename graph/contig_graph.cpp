@@ -254,7 +254,10 @@ int ContigGraph::CountDeadEnds() {
     for (int64_t i = 0; i < (int64_t)vertices_.size(); ++i) {
         if (vertices_[i].contig().size() == kmer_size_ && vertices_[i].contig().IsPalindrome())
             continue;
-        if (vertices_[i].in_edges().empty() || vertices_[i].out_edges().empty()) {
+        if (vertices_[i].in_edges().empty()) {
+            count++;
+        }
+        if (vertices_[i].out_edges().empty()) {
             count++;
         }
     }
@@ -346,7 +349,7 @@ int64_t ContigGraph::RemoveDeadEnd(int min_length, double min_cover) {
     return num_deadend;
 }
 
-int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
+int64_t ContigGraph::RemoveBubble() {
     deque<ContigGraphVertexAdaptor> candidates;
     omp_lock_t bubble_lock;
     omp_init_lock(&bubble_lock);
@@ -357,7 +360,7 @@ int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
             ContigGraphVertexAdaptor current(&vertices_[i], strand);
 
             if (current.out_edges().size() > 1 && current.contig_size() > kmer_size_) {
-                ContigGraphBranchGroup branch_group(this, current, max_branches, max_length);
+                ContigGraphBranchGroup branch_group(this, current, 4, kmer_size_ + 2);
 
                 if (branch_group.Search()) {
                     ContigGraphVertexAdaptor begin = branch_group.begin();
@@ -366,7 +369,7 @@ int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
                     begin.ReverseComplement();
                     end.ReverseComplement();
                     std::swap(begin, end);
-                    ContigGraphBranchGroup rev_branch_group(this, begin, max_branches, max_length);
+                    ContigGraphBranchGroup rev_branch_group(this, begin, 4, kmer_size_ + 2);
 
                     if (rev_branch_group.Search() && rev_branch_group.end() == end) {
                         omp_set_lock(&bubble_lock);
@@ -383,7 +386,7 @@ int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
         ContigGraphVertexAdaptor current = candidates[i];
 
         if (current.out_edges().size() > 1) {
-            ContigGraphBranchGroup branch_group(this, current, max_branches, max_length);
+            ContigGraphBranchGroup branch_group(this, current, 4, kmer_size_ + 2);
 
             if (branch_group.Search()) {
                 ContigGraphVertexAdaptor begin = branch_group.begin();
@@ -392,7 +395,7 @@ int64_t ContigGraph::RemoveBubble(int max_branches, int max_length) {
                 begin.ReverseComplement();
                 end.ReverseComplement();
                 std::swap(begin, end);
-                ContigGraphBranchGroup rev_branch_group(this, begin, max_branches, max_length);
+                ContigGraphBranchGroup rev_branch_group(this, begin, 4, kmer_size_ + 2);
 
                 if (rev_branch_group.Search() && rev_branch_group.end() == end) {
                     branch_group.Merge();
@@ -965,6 +968,58 @@ void ContigGraph::Decomposite() {
             break;
         last = split;
     }
+}
+
+#define STRAND(x) ((x.is_reverse()) ? "-" : "+")
+
+void ContigGraph::PrintGFASegments(ostream &os) {
+    for (int64_t i = 0; i < (int64_t)vertices_.size(); ++i) {
+        auto vx = vertices_[i];
+        os << "S\t" << vx.id() << "\t" << vx.contig() << "\t"
+           << "DP:f:" << vx.coverage() << "\t"
+           << "KC:i:" << vx.kmer_count() << endl;
+    }
+}
+
+void ContigGraph::PrintGFAEdges(ostream &os) {
+    for (unsigned i = 0; i < vertices().size(); ++i) {
+        if (vertices()[i].status().IsUsed())
+            continue;
+
+        deque<ContigGraphVertexAdaptor> qu;
+        qu.push_back(ContigGraphVertexAdaptor(&vertices()[i], 0));
+        vertices()[i].status().SetUsedFlag();
+
+        for (int index = 0; index < (int)qu.size(); ++index) {
+            ContigGraphVertexAdaptor current = qu[index];
+
+            for (int strand = 0; strand < 2; ++strand) {
+                for (int x = 0; x < 4; ++x) {
+                    if (current.out_edges()[x]) {
+                        ContigGraphVertexAdaptor next = GetNeighbor(current, x);
+                        if (strand == 0) {
+                            os << "L\t" << current.id() << "\t" << STRAND(current) << "\t" << next.id() << "\t"
+                               << STRAND(next) << "\t" << (kmer_size_ - 1) << "M" << endl;
+
+                            if (!next.status().IsUsed())
+                                qu.push_back(next);
+                        } else {
+                            os << "L\t" << current.id() << "\t" << STRAND(current) << "\t" << next.id() << "\t"
+                               << STRAND(next) << "\t" << (kmer_size_ - 1) << "M" << endl;
+                            // os << "L\t" << next.id() << "\t" << STRAND(next) << "\t" << current.id() << "\t"
+                            //      << STRAND(current) << "\t" << (kmer_size_ - 1) << "M" << endl;
+
+                            if (!next.status().IsUsed())
+                                qu.push_back(next.ReverseComplement());
+                        }
+                        next.status().SetUsedFlag();
+                    }
+                }
+                current.ReverseComplement();
+            }
+        }
+    }
+    ClearStatus();
 }
 
 void ContigGraph::GetComponents(deque<deque<ContigGraphVertexAdaptor>> &components, deque<string> &component_strings) {
