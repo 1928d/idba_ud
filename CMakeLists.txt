@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(idba_ud)
 
-set(MAXK 6)
-set(MAXSS 310)
+set(MAXK 4)
+set(MAXSS 768)
 add_compile_options(-Wall -pedantic -O3 -march=native -DMAXSS=${MAXSS} -DMAXK=${MAXK})
 
 find_package(ZLIB)

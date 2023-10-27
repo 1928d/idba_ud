@@ -1,2 +1,3 @@
 **/*.o
 idba_ud.dSYM
+*.gz
