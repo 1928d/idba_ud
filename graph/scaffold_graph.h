@@ -215,6 +215,19 @@ class ScaffoldGraph {
     ContigGraph &contig_graph() { return contig_graph_; }
     const ContigGraph &contig_graph() const { return contig_graph_; }
 
+    void print_edges(int level) const {
+        for (unsigned i = 0; i < edge_data_.size(); ++i) {
+            if (edge_data_[i].status().IsDead())
+                continue;
+
+            if (edge_data_[i].level() != level)
+                continue;
+
+            auto &e = edge_data_[i];
+            std::cout << e.from().id() << " " << e.to().id() << std::endl;
+        }
+    }
+
     int num_edges(int level) const {
         int count = 0;
         for (unsigned i = 0; i < edge_data_.size(); ++i) {

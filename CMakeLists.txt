@@ -41,3 +41,11 @@ include_directories(${PROJECT_SOURCE_DIR})
 add_executable(idba_ud idba_ud.cpp)
 target_compile_features(idba_ud PRIVATE cxx_std_11)
 target_link_libraries(idba_ud idba_lib ZLIB::ZLIB)
+
+add_executable(scaffold scaffold.cpp)
+target_compile_features(scaffold PRIVATE cxx_std_11)
+target_link_libraries(scaffold idba_lib ZLIB::ZLIB)
+
+add_executable(align align.cpp)
+target_compile_features(align PRIVATE cxx_std_11)
+target_link_libraries(align idba_lib ZLIB::ZLIB)
