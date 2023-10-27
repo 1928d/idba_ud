@@ -22,6 +22,7 @@
 #include "assembly/local_assembler.h"
 #include "basic/bit_operation.h"
 #include "basic/histgram.h"
+#include "extras.hpp"
 #include "graph/contig_graph.h"
 #include "graph/hash_graph.h"
 #include "graph/scaffold_graph.h"
@@ -200,8 +201,9 @@ int main(int argc, char *argv[]) {
         option.num_threads = omp_get_max_threads();
     else
         omp_set_num_threads(option.num_threads);
-    cout << "number of threads " << option.num_threads << endl;
+    log() << "number of threads " << option.num_threads << endl;
 
+    timer loading_fastq;
     ReadInputFastq(option.read_file_1, option.read_file_2, option.long_read_file, assembly_info);
     // ReadInput(option.read_file_1, option.long_read_file, assembly_info);
     deque<Sequence> extra_reads;
@@ -212,19 +214,20 @@ int main(int argc, char *argv[]) {
             extra_reads.insert(extra_reads.end(), reads.begin(), reads.end());
         }
     }
-    cout << "reads " << assembly_info.reads.size() << endl;
-    cout << "long reads " << assembly_info.long_reads.size() << endl;
-    cout << "extra reads " << extra_reads.size() << endl;
+    log("perf") << "loading fastq " << loading_fastq.duration() << endl;
+    log() << "reads " << assembly_info.reads.size() << endl;
+    log() << "long reads " << assembly_info.long_reads.size() << endl;
+    log() << "extra reads " << extra_reads.size() << endl;
 
     assembly_info.long_reads.insert(assembly_info.long_reads.end(), extra_reads.begin(), extra_reads.end());
     assembly_info.ClearStatus();
 
     read_length = assembly_info.read_length();
-    cout << "read_length " << read_length << endl;
+    log() << "read_length " << read_length << endl;
 
     if (option.is_pre_correction) {
         int kmer_size = (option.maxk + option.mink) / 2;
-        cout << "kmer " << kmer_size << endl;
+        log() << "kmer " << kmer_size << endl;
         BuildHashGraph(kmer_size);
         AlignReads(option.contig_file(kmer_size), option.align_file(kmer_size));
         CorrectReads(kmer_size);
@@ -234,7 +237,7 @@ int main(int argc, char *argv[]) {
     int old_kmer_size = 0;
     int kmer_size = option.mink;
     while (true) {
-        cout << "kmer " << kmer_size << endl;
+        log() << "kmer " << kmer_size << endl;
 
         if (kmer_size >= (option.mink + option.maxk) / 2 || kmer_size == option.maxk)
             assembly_info.ref_contigs.clear();
@@ -283,6 +286,7 @@ int main(int argc, char *argv[]) {
 }
 
 void BuildHashGraph(int kmer_size) {
+    timer kmer_cnt;
     BuildKmerFile(assembly_info, kmer_size, option.min_count, option.prefix_length, option.kmer_file());
 
     HashGraph hash_graph(kmer_size);
@@ -300,11 +304,13 @@ void BuildHashGraph(int kmer_size) {
         hash_graph.RefreshEdges();
     }
 
+    log("perf") << "kmer count " << kmer_cnt.duration() << endl;
     Assemble(hash_graph);
 }
 
 void Assemble(HashGraph &hash_graph) {
-    cout << "kmers " << hash_graph.num_vertices() << " " << hash_graph.num_edges() << endl;
+    log() << "kmers " << hash_graph.num_vertices() << " " << hash_graph.num_edges() << endl;
+    timer assemb;
 
     int kmer_size = hash_graph.kmer_size();
     double min_cover = max(1, (kmer_size == option.mink ? option.min_count : option.min_support));
@@ -330,7 +336,7 @@ void Assemble(HashGraph &hash_graph) {
 
     if (!option.is_no_bubble) {
         int bubble = contig_graph.RemoveBubble();
-        cout << "merge bubble " << bubble << endl;
+        log() << "merge bubble " << bubble << endl;
         contig_graph.MergeSimilarPath();
     }
 
@@ -364,9 +370,12 @@ void Assemble(HashGraph &hash_graph) {
     std::ofstream gfa_graph(option.gfa_file(kmer_size));
     contig_graph.PrintGFASegments(gfa_graph);
     contig_graph.PrintGFAEdges(gfa_graph);
+
+    log("perf") << "assemble graph " << assemb.duration() << endl;
 }
 
 void AlignReads(const string &contig_file, const string &align_file) {
+    timer align;
     deque<Sequence> contigs;
     ReadSequence(contig_file, contigs);
 
@@ -374,13 +383,15 @@ void AlignReads(const string &contig_file, const string &align_file) {
     hash_aligner.Initialize(contigs);
 
     int64_t num_aligned_reads = AlignReads(assembly_info, hash_aligner, option.similar, align_file, true);
-    cout << "aligned " << num_aligned_reads << " reads" << endl;
+    log("perf") << "align reads " << align.duration() << endl;
+    log() << "aligned " << num_aligned_reads << " reads" << endl;
 }
 
 void CorrectReads(int kmer_size) {
     if (option.is_no_correct)
         return;
 
+    timer corr;
     deque<Sequence> contigs;
     deque<string> names;
     deque<ContigInfo> contig_infos;
@@ -388,14 +399,17 @@ void CorrectReads(int kmer_size) {
     CorrectReads(assembly_info, contigs, contig_infos, option.align_file(kmer_size), option.max_mismatch);
     // WriteSequence(option.contig_file(kmer_size), contigs);
     WriteContig(option.contig_file(kmer_size), contigs, contig_infos, FormatString("contig-%d", kmer_size));
+    log("perf") << "correct reads " << corr.duration() << endl;
 }
 
 void LocalAssembly(int kmer_size, int new_kmer_size) {
     // if (median == 0)
     // EstimateDistance(kmer_size);
+    timer local_asm;
+
     EstimateDistance(option.align_file(kmer_size), median, sd);
     if (median < 0 || median != median || sd != sd || sd > 2 * median) {
-        cout << "invalid insert distance" << endl;
+        log() << "invalid insert distance" << endl;
         deque<Sequence> local_contigs;
         WriteSequence(option.local_contig_file(kmer_size), local_contigs, FormatString("local_contig_%d", kmer_size));
         return;
@@ -443,11 +457,14 @@ void LocalAssembly(int kmer_size, int new_kmer_size) {
             ++num_seed_contigs;
     }
 
-    cout << "seed contigs " << num_seed_contigs << " local contigs " << local_contigs.size() << endl;
+    log() << "seed contigs " << num_seed_contigs << " local contigs " << local_contigs.size() << endl;
     WriteSequence(option.local_contig_file(kmer_size), local_contigs, FormatString("local_contig_%d", kmer_size));
+    log("perf") << "local assembly " << local_asm.duration() << endl;
 }
 
 void Iterate(int kmer_size, int new_kmer_size) {
+    timer iter;
+
     deque<Sequence> contigs;
     ReadSequence(option.contig_file(kmer_size), contigs);
 
@@ -481,6 +498,7 @@ void Iterate(int kmer_size, int new_kmer_size) {
     //    else
     //        hash_graph.AddAllEdges();
 
+    log("perf") << "iterate " << iter.duration() << endl;
     Assemble(hash_graph);
 }
 
@@ -493,7 +511,7 @@ void AlignReads(const string &contig_file, ShortReadLibrary &library, const stri
     hash_aligner.Initialize(contigs);
 
     int64_t num_aligned_reads = AlignReads(assembly_info, hash_aligner, option.similar, align_file, true);
-    cout << "aligned " << num_aligned_reads << " reads" << endl;
+    log() << "aligned " << num_aligned_reads << " reads" << endl;
 
     assembly_info.reads.swap(library.reads());
 }
